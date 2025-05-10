@@ -1,10 +1,29 @@
-{% extends "layout.html" %}
+{% extends "home.html" %}
+
 {% block content %}
-    <h1>{{ title }}</h1>
-    <div id='chart' class='chart'></div>
-    <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
-    <script type='text/javascript'>
-        var graphs = {{graphJSON | safe}};
-        Plotly.plot('chart',graphs,{});
-    </script>
+<h2>Election Results by Country</h2>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-center">
+            <div class="col-md-9">
+                <label class="form-label">Select Metric:</label>
+                <select name="variable" class="form-select" onchange="this.form.submit()">
+                    {% for column in numeric_columns %}
+                        <option value="{{ column }}" {% if column == selected_var %}selected{% endif %}>
+                            {{ column }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Update</button>
+            </div>
+        </form>
+        
+        <div class="mt-4 text-center">
+            <img src="data:image/png;base64,{{ plot_data }}" class="img-fluid rounded">
+        </div>
+    </div>
+</div>
 {% endblock %}

@@ -1,0 +1,18 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa; /* light gray */
+    color: #212529; /* dark text */
+}
+
+.navbar {
+    background-color: #004080 !important; /* override Bootstrap dark */
+}
+
+.navbar-brand, .nav-link {
+    color: #ffffff !important;
+}
+
+.nav-link.active {
+    font-weight: bold;
+    color: #ffd700 !important; /* gold */
+}

@@ -1,0 +1,39 @@
+{% extends "home.html" %}
+
+{% block content %}
+<h2>Explore Relationships</h2>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label">X-Axis Variable:</label>
+                <select name="x_var" class="form-select">
+                    {% for column in demog_columns %}
+                        <option value="{{ column }}" {% if column == x_var %}selected{% endif %}>
+                            {{ column }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Y-Axis Variable:</label>
+                <select name="y_var" class="form-select">
+                    {% for column in election_columns %}
+                        <option value="{{ column }}" {% if column == y_var %}selected{% endif %}>
+                            {{ column }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Update</button>
+            </div>
+        </form>
+        
+        <div class="mt-4 text-center">
+            <img src="data:image/png;base64,{{ plot_data }}" class="img-fluid rounded">
+        </div>
+    </div>
+</div>
+{% endblock %}

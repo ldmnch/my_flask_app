@@ -1,73 +1,150 @@
-from flask import render_template, flash, redirect, url_for, request
-from flaskapp import app, db
-from flaskapp.models import BlogPost, IpView, Day
-from flaskapp.forms import PostForm
-import datetime
-
+from flask import render_template, request
+from flaskapp import app
+from flaskapp.models import UkData
 import pandas as pd
-import json
-import plotly
-import plotly.express as px
+import matplotlib
+matplotlib.use('Agg')  # Set backend before importing pyplot
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import BytesIO
+import base64
 
+ELECTION_COLUMNS = ['Turnout19', 'ConVote19', 'LabVote19', 'LDVote19',
+    'SNPVote19', 'PCVote19', 'UKIPVote19', 'GreenVote19',
+    'BrexitVote19', 'TotalVote19']
 
-# Route for the home page, which is where the blog posts will be shown
+DEMOGRAPHIC_COLUMNS = [
+    'c11PopulationDensity', 'c11Female', 'c11FulltimeStudent',
+    'c11Retired', 'c11HouseOwned', 'c11HouseholdMarried'
+]
+
 @app.route("/")
-@app.route("/home")
 def home():
-    # Querying all blog posts from the database
-    posts = BlogPost.query.all()
-    return render_template('home.html', posts=posts)
+    return render_template('home.html')
 
-
-# Route for the about page
-@app.route("/about")
-def about():
-    return render_template('about.html', title='About page')
-
-
-# Route to where users add posts (needs to accept get and post requests)
-@app.route("/post/new", methods=['GET', 'POST'])
-def new_post():
-    form = PostForm()
-    if form.validate_on_submit():
-        post = BlogPost(title=form.title.data, content=form.content.data, user_id=1)
-        db.session.add(post)
-        db.session.commit()
-        flash('Your post has been created!', 'success')
-        return redirect(url_for('home'))
-    return render_template('create_post.html', title='New Post', form=form)
-
-
-# Route to the dashboard page
 @app.route('/dashboard')
 def dashboard():
-    days = Day.query.all()
-    df = pd.DataFrame([{'Date': day.id, 'Page views': day.views} for day in days])
+    """First dashboard with bar chart by country"""
+    selected_var = request.args.get('variable', 'TotalVote19')
+    
+    # Get data
+    df = get_dataframe(['country', selected_var])
+    country_means = df.groupby('country')[selected_var].mean().reset_index()
+    
+    # Create plot
+    plot_data = create_bar_plot(
+        data=country_means,
+        x='country',
+        y=selected_var,
+        title=f'Average {selected_var} by Country'
+    )
+    
+    return render_template(
+        'dashboard.html',
+        plot_data=plot_data,
+        numeric_columns=ELECTION_COLUMNS,
+        selected_var=selected_var
+    )
 
-    fig = px.bar(df, x='Date', y='Page views')
+@app.route('/relationships')
+def relationships():
+    """Second dashboard with faceted scatter plots"""
+    x_var = request.args.get('x_var', 'c11PopulationDensity')
+    y_var = request.args.get('y_var', 'Turnout19')
+    
+    # Get data
+    df = get_dataframe(['country', x_var, y_var])
+    
+    # Create plot
+    plot_data = create_scatter_plot(
+        data=df,
+        x_var=x_var,
+        y_var=y_var,
+        title=f'{y_var} vs {x_var} by Country'
+    )
+    
+    return render_template(
+        'relationships.html',
+        plot_data=plot_data,
+        demog_columns = DEMOGRAPHIC_COLUMNS,
+        election_columns = ELECTION_COLUMNS,
+        x_var=x_var,
+        y_var=y_var
+    )
 
-    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('dashboard.html', title='Page views per day', graphJSON=graphJSON)
+# Helper functions
+def get_dataframe(columns):
+    """Get DataFrame with specified columns from database"""
+    data = UkData.query.all()
 
+    df = pd.DataFrame([{
+        'id': c.id,
+        'constituency_name': c.constituency_name,
+        'country': c.country,
+        'region': c.region,
+        'Turnout19': c.Turnout19,
+        'ConVote19': c.ConVote19,
+        'LabVote19': c.LabVote19,
+        'LDVote19': c.LDVote19,
+        'SNPVote19': c.SNPVote19,
+        'PCVote19': c.PCVote19,
+        'UKIPVote19': c.UKIPVote19,
+        'GreenVote19': c.GreenVote19,
+        'BrexitVote19': c.BrexitVote19,
+        'TotalVote19': c.TotalVote19,
+        'c11PopulationDensity': c.c11PopulationDensity,
+        'c11Female': c.c11Female,
+        'c11FulltimeStudent': c.c11FulltimeStudent,
+        'c11Retired': c.c11Retired,
+        'c11HouseOwned': c.c11HouseOwned,
+        'c11HouseholdMarried': c.c11HouseholdMarried
+    } for c in data])
 
-@app.before_request
-def before_request_func():
-    day_id = datetime.date.today()  # get our day_id
-    client_ip = request.remote_addr  # get the ip address of where the client request came from
+    return df
 
-    query = Day.query.filter_by(id=day_id)  # try to get the row associated to the current day
-    if query.count() > 0:
-        # the current day is already in table, simply increment its views
-        current_day = query.first()
-        current_day.views += 1
-    else:
-        # the current day does not exist, it's the first view for the day.
-        current_day = Day(id=day_id, views=1)
-        db.session.add(current_day)  # insert a new day into the day table
+def create_bar_plot(data, x, y, title):
+    """Create a bar plot with values annotated"""
+    plt.figure(figsize=(10, 6))
+    sns.set_style("whitegrid")
+    
+    ax = sns.barplot(x=x, y=y, data=data, palette="Blues_d")
+    
+    # Add values on bars
+    for p in ax.patches:
+        ax.annotate(
+            f"{p.get_height():,.1f}",
+            (p.get_x() + p.get_width() / 2., p.get_height()),
+            ha='center', va='center', xytext=(0, 10),
+            textcoords='offset points'
+        )
+    
+    plt.title(title, pad=20)
+    plt.xlabel(x)
+    plt.ylabel(y)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    return save_plot_to_base64()
 
-    query = IpView.query.filter_by(ip=client_ip, date_id=day_id)
-    if query.count() == 0:  # check if it's the first time a viewer from this ip address is viewing the website
-        ip_view = IpView(ip=client_ip, date_id=day_id)
-        db.session.add(ip_view)  # insert into the ip_view table
+def create_scatter_plot(data, x_var, y_var, title):
+    """Create a scatter plot with regression line"""
+    plt.figure(figsize=(10, 6))
+    sns.set_style("whitegrid")
+    
+    ax = sns.regplot(x=x_var, y=y_var, data=data, scatter_kws={'alpha':0.5}, line_kws={'color':'red'})
+    
+    plt.title(title, pad=20)
+    plt.xlabel(x_var)
+    plt.ylabel(y_var)
+    plt.tight_layout()
+    
+    return save_plot_to_base64()
 
-    db.session.commit()  # commit all the changes to the database
+def save_plot_to_base64():
+    """Save current plot to base64 encoded string"""
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+    buffer.seek(0)
+    plot_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    plt.close()
+    return plot_data
